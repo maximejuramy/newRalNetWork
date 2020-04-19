@@ -5,25 +5,11 @@ from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import OneHotEncoder
 
 from neuralNetworkClass import TwoLayerNeuralNetwork
+from read_data import get_data
 from config import relu
 
-
-## Importing data
-image_size = 28
-num_images = 100
-
-f = gzip.open('data/train-images-idx3-ubyte.gz','r')
-f.read(16)
-
-buf = f.read(image_size * image_size * num_images)
-data = np.frombuffer(buf, dtype=np.uint8).astype(np.float32)
-X = data.reshape(num_images, image_size*image_size)
-
-f_y = gzip.open('data/train-labels-idx1-ubyte.gz','r')
-f_y.read(8)
-
-buf = f_y.read(num_images)
-y = np.frombuffer(buf, dtype=np.uint8).astype(np.int64)
+# Reading data
+X, y = get_data()
 
 X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2)
 
