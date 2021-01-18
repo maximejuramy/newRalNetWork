@@ -23,3 +23,7 @@ def relu(x):
         )
 
     return np.array([max(0, elem) for elem in list(x)])
+
+
+def relu_derivate(x):
+    return np.array([1 if elem > 0 else 0 for elem in list(x)])

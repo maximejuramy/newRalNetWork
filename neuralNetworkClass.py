@@ -16,8 +16,9 @@
 
 import numpy as np
 import random
+from sklearn.preprocessing import OneHotEncoder
 
-from config import softmax
+from config import softmax, relu_derivate
 
 
 # Loss & quality evaluation functions
@@ -26,7 +27,7 @@ def cross_entropy(predicted_scores, true_labels):
     if len(true_labels) == 1:
         raise ValueError(
             "Well you cannot really use Cross-Entropy for"
-            + "a regression problem I'm afraid"
+            + " a regression problem I'm afraid"
         )
 
     # Only one class equals 1 (all others equal 0) =>
@@ -50,6 +51,10 @@ class TwoLayerNeuralNetwork(object):
         self.hidden_layer_length = hidden_layer_length
         self.output_length = output_length
         self.activation_function = activation_function
+        self.oneHotEncoder = OneHotEncoder(
+            handle_unknown='ignore',
+            sparse=False
+        )
 
         if self.output_length > 1:
             self.output_activation_function = softmax
@@ -89,13 +94,25 @@ class TwoLayerNeuralNetwork(object):
         )
         activations.append(output_activations)
 
-        return np.array(activations)
+        return activations
+
+    def predict_proba(self, inputs):
+        """
+            This method predicts the scores for a given input
+        """
+        return np.array([self.feed_forward(x)[-1] for x in inputs])
 
     def predict(self, inputs):
         """
-            This method predicts the labels for a given input
+            This method predicts the label for a given input
         """
-        return [self.feed_forward(x)[-1] for x in inputs]
+        probas = self.predict_proba(inputs)
+
+        return [
+            self.oneHotEncoder.categories_[0][np.argmax(proba)]
+            for proba
+            in probas
+        ]
 
     def back_propagate(self, activations, input, output):
         """
@@ -106,17 +123,12 @@ class TwoLayerNeuralNetwork(object):
 
         # Handling the output layer
         ############################
-        z_output = (
-            self.output_layer_weights.dot(activations[0].reshape(
-                self.hidden_layer_length, 1)
-            ) + self.output_layer_bias.reshape(self.output_length, 1)
-        )
 
         # Gradient of the output layer bias
         nabla_b_output_layer = (
-            (2*(activations[-1] - output)).reshape(self.output_length, 1)
-            * softmax(z_output)
-        )
+            2*(activations[-1] - output)
+            * activations[-1] * (1 - activations[-1])  # sigmoid derivative
+        ).reshape(self.output_length, 1)
 
         # Gradient of the output layer weights
         nabla_w_output_layer = (
@@ -125,31 +137,35 @@ class TwoLayerNeuralNetwork(object):
 
         # Handling the hidden layer
         ############################
-        z_hidden = (
-            self.hidden_layer_weights.dot(input.reshape(self.input_length, 1))
-            + self.hidden_layer_bias.reshape(self.hidden_layer_length, 1)
-        )
-
         nabla_b_hidden_layer = (
-            self.output_layer_weights.transpose().dot(nabla_b_output_layer)
-            * softmax(z_hidden)
+            relu_derivate(activations[0]).reshape(self.hidden_layer_length, 1)
+            * self.output_layer_weights.transpose().dot(
+                nabla_b_output_layer
+            )
         )
 
         nabla_w_hidden_layer = (
-            nabla_b_hidden_layer
-        ).dot(input.reshape(1, self.input_length))
+            nabla_b_hidden_layer.dot(
+                input.transpose().reshape(1, self.input_length)
+            )
+        )
 
         return (
             nabla_w_hidden_layer, nabla_b_hidden_layer,
             nabla_w_output_layer, nabla_b_output_layer
         )
 
-    def SGD(self, inputs, outputs, epochs, eta, mini_batch_size):
+    def fit(self, inputs, outputs, epochs, eta, mini_batch_size):
         # Input size
         n = len(inputs)
 
+        # OneHotEncoding the labels
+        training_labels = self.oneHotEncoder.fit_transform(
+            outputs.reshape(-1, 1)
+        )
+
         # Putting together inputs and outputs before shuffling
-        training_data = list(zip(inputs, outputs))
+        training_data = list(zip(inputs, training_labels))
 
         # Looping on epochs
         for epoch in range(epochs):
@@ -165,23 +181,22 @@ class TwoLayerNeuralNetwork(object):
             for batch in mini_batches:
                 self.update_mini_batch(batch, eta)
 
-            print(f"Epoch {epoch} concluded")
+            # print(f"Epoch {epoch} concluded")
             training_inputs = [data[0] for data in training_data]
-            predicted_scores = self.predict(training_inputs)
+            predicted_scores = self.predict_proba(training_inputs)
             score = 0
 
-            for pred, output in zip(predicted_scores, outputs):
+            for pred, output in zip(predicted_scores, training_labels):
                 score += cross_entropy(
                     np.array(pred),
                     np.array(output)
                 )
-
-            print(score/n)
+            '''
             print(
                 "The cross-entropy at the end of this epoch is {}\n".format(
                     round(score/len(training_data), 1)
                 )
-            )
+            )'''
 
     def update_mini_batch(self, batch, eta):
         """

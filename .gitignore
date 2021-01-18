@@ -7,3 +7,6 @@ __pycache__
 
 # Ignoring data folder
 data
+
+# pyenv files
+.python-version
